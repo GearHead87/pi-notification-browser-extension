@@ -1,7 +1,7 @@
 import type { PlasmoCSConfig } from "plasmo";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { ACTIVE_NOTIFICATION_KEY, getActiveNotification } from "./lib/storage";
+import { ACTIVE_NOTIFICATIONS_KEY, getActiveNotifications } from "./lib/storage";
 import type { ProjectNotification, RuntimeMessage } from "./lib/types";
 
 export const config: PlasmoCSConfig = {
@@ -37,14 +37,18 @@ const overlayCss = `
 		background:
 			radial-gradient(circle at top, rgba(92, 255, 166, 0.14), transparent 34%),
 			radial-gradient(circle at bottom, rgba(96, 165, 250, 0.18), transparent 40%),
-			rgba(4, 10, 18, 0.8);
+			rgba(4, 10, 18, 0.82);
 		backdrop-filter: blur(18px) saturate(120%);
 		animation: piFadeIn 160ms ease-out;
 	}
 
-	.pi-card {
-		width: min(720px, 100%);
-		padding: 30px;
+	.pi-panel {
+		width: min(760px, 100%);
+		max-height: min(86vh, 900px);
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 22px 22px 18px;
 		border-radius: 28px;
 		color: #ecfdf5;
 		background: linear-gradient(180deg, rgba(9, 18, 29, 0.96), rgba(8, 14, 24, 0.94));
@@ -52,17 +56,103 @@ const overlayCss = `
 		box-shadow:
 			0 30px 80px rgba(0, 0, 0, 0.45),
 			0 0 0 1px rgba(92, 255, 166, 0.08) inset;
-		transform: translateY(0);
 		animation: piRise 220ms ease-out;
+	}
+
+	.pi-panel-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 4px 4px 2px;
+	}
+
+	.pi-panel-title {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		font-size: 18px;
+		font-weight: 700;
+		letter-spacing: -0.01em;
+		color: #ecfdf5;
+	}
+
+	.pi-panel-count {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 26px;
+		height: 24px;
+		padding: 0 8px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 800;
+		color: #052e16;
+		background: linear-gradient(180deg, #86efac, #4ade80);
+		box-shadow: 0 6px 18px rgba(34, 197, 94, 0.32);
+	}
+
+	.pi-dismiss-all {
+		appearance: none;
+		border: 1px solid rgba(248, 113, 113, 0.32);
+		cursor: pointer;
+		padding: 8px 14px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: #fecaca;
+		background: rgba(248, 113, 113, 0.12);
+		transition: background-color 120ms ease, color 120ms ease;
+	}
+
+	.pi-dismiss-all:hover {
+		background: rgba(248, 113, 113, 0.22);
+		color: #fff1f2;
+	}
+
+	.pi-stack {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		overflow-y: auto;
+		padding: 4px;
+		margin: -4px;
+	}
+
+	.pi-stack::-webkit-scrollbar {
+		width: 8px;
+	}
+	.pi-stack::-webkit-scrollbar-thumb {
+		background: rgba(255, 255, 255, 0.1);
+		border-radius: 999px;
+	}
+
+	.pi-card {
+		position: relative;
+		padding: 18px 20px 18px 20px;
+		border-radius: 20px;
+		background: linear-gradient(180deg, rgba(15, 28, 42, 0.96), rgba(10, 20, 32, 0.94));
+		border: 1px solid rgba(255, 255, 255, 0.06);
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+		animation: piRise 180ms ease-out;
+	}
+
+	.pi-card-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
 	}
 
 	.pi-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 10px;
-		padding: 8px 14px;
+		padding: 6px 12px;
 		border-radius: 999px;
-		font-size: 12px;
+		font-size: 11px;
 		font-weight: 700;
 		letter-spacing: 0.14em;
 		text-transform: uppercase;
@@ -72,80 +162,90 @@ const overlayCss = `
 	}
 
 	.pi-dot {
-		width: 10px;
-		height: 10px;
+		width: 8px;
+		height: 8px;
 		border-radius: 999px;
 		background: #4ade80;
-		box-shadow: 0 0 18px rgba(74, 222, 128, 0.8);
+		box-shadow: 0 0 14px rgba(74, 222, 128, 0.8);
 	}
 
-	.pi-title {
-		margin: 18px 0 8px;
-		font-size: clamp(34px, 5vw, 52px);
-		line-height: 0.98;
-		font-weight: 800;
-		letter-spacing: -0.05em;
+	.pi-card-close {
+		appearance: none;
+		border: 0;
+		cursor: pointer;
+		width: 32px;
+		height: 32px;
+		border-radius: 10px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		color: rgba(252, 165, 165, 0.92);
+		background: rgba(248, 113, 113, 0.1);
+		transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+	}
+
+	.pi-card-close:hover {
+		background: rgba(248, 113, 113, 0.22);
+		color: #fff1f2;
+		transform: scale(1.04);
+	}
+
+	.pi-card-close svg {
+		width: 16px;
+		height: 16px;
 	}
 
 	.pi-project {
-		margin: 0;
-		font-size: clamp(20px, 2vw, 26px);
-		font-weight: 600;
-		color: rgba(236, 253, 245, 0.92);
+		margin: 14px 0 4px;
+		font-size: clamp(20px, 2.2vw, 28px);
+		line-height: 1.1;
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		color: #ecfdf5;
+		word-break: break-word;
 	}
 
 	.pi-meta-grid {
-		margin-top: 22px;
+		margin-top: 10px;
 		display: grid;
-		gap: 14px;
+		grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+		gap: 12px 18px;
 	}
 
 	.pi-meta-label {
-		margin-bottom: 6px;
-		font-size: 11px;
+		margin-bottom: 4px;
+		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
-		color: rgba(167, 243, 208, 0.58);
+		color: rgba(167, 243, 208, 0.55);
 	}
 
 	.pi-meta-value {
-		font-size: 15px;
-		line-height: 1.6;
+		font-size: 13px;
+		line-height: 1.5;
 		color: rgba(236, 253, 245, 0.88);
 		word-break: break-word;
 	}
 
-	.pi-actions {
-		margin-top: 26px;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 16px;
-		flex-wrap: wrap;
-	}
-
 	.pi-hint {
-		font-size: 13px;
-		color: rgba(220, 252, 231, 0.68);
+		padding: 4px 4px 0;
+		font-size: 12px;
+		color: rgba(220, 252, 231, 0.6);
+		text-align: center;
 	}
 
-	.pi-close {
-		appearance: none;
-		border: 0;
-		cursor: pointer;
-		padding: 12px 18px;
-		border-radius: 999px;
-		font-size: 14px;
+	.pi-hint kbd {
+		display: inline-block;
+		padding: 1px 6px;
+		margin: 0 2px;
+		border-radius: 6px;
+		font-family: inherit;
+		font-size: 11px;
 		font-weight: 700;
-		letter-spacing: 0.02em;
-		color: #052e16;
-		background: linear-gradient(180deg, #86efac, #4ade80);
-		box-shadow: 0 10px 28px rgba(34, 197, 94, 0.28);
-	}
-
-	.pi-close:hover {
-		filter: brightness(1.04);
+		color: #ecfdf5;
+		background: rgba(255, 255, 255, 0.08);
+		border: 1px solid rgba(255, 255, 255, 0.12);
 	}
 
 	@keyframes piFadeIn {
@@ -156,7 +256,7 @@ const overlayCss = `
 	@keyframes piRise {
 		from {
 			opacity: 0;
-			transform: translateY(12px) scale(0.985);
+			transform: translateY(10px) scale(0.985);
 		}
 		to {
 			opacity: 1;
@@ -178,33 +278,92 @@ function formatTime(timestamp: number): string {
 	});
 }
 
-function Overlay(): React.JSX.Element | null {
-	const [notification, setNotification] = useState<ProjectNotification | null>(null);
+function CloseIcon(): React.JSX.Element {
+	return (
+		<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+			<line x1="6" y1="6" x2="18" y2="18" />
+			<line x1="18" y1="6" x2="6" y2="18" />
+		</svg>
+	);
+}
 
-	const dismiss = useCallback(() => {
-		if (!notification) return;
-		sendRuntimeMessage({
-			type: "dismiss-notification",
-			id: notification.id,
-		});
-	}, [notification]);
+function NotificationCard({
+	notification,
+	onDismiss,
+}: {
+	notification: ProjectNotification;
+	onDismiss: (id: string) => void;
+}): React.JSX.Element {
+	return (
+		<article className="pi-card">
+			<div className="pi-card-head">
+				<div className="pi-pill">
+					<span className="pi-dot" />
+					{notification.title}
+				</div>
+				<button
+					className="pi-card-close"
+					type="button"
+					aria-label={`Dismiss ${notification.projectName}`}
+					title="Dismiss this notification"
+					onClick={() => onDismiss(notification.id)}
+				>
+					<CloseIcon />
+				</button>
+			</div>
+
+			<h2 className="pi-project">{notification.projectName}</h2>
+
+			<div className="pi-meta-grid">
+				<div>
+					<div className="pi-meta-label">Path</div>
+					<div className="pi-meta-value">{notification.projectPath}</div>
+				</div>
+
+				{notification.model ? (
+					<div>
+						<div className="pi-meta-label">Model</div>
+						<div className="pi-meta-value">{notification.model}</div>
+					</div>
+				) : null}
+
+				<div>
+					<div className="pi-meta-label">Finished</div>
+					<div className="pi-meta-value">{formatTime(notification.timestamp)}</div>
+				</div>
+			</div>
+		</article>
+	);
+}
+
+function Overlay(): React.JSX.Element | null {
+	const [notifications, setNotifications] = useState<ProjectNotification[]>([]);
+
+	const dismissOne = useCallback((id: string) => {
+		sendRuntimeMessage({ type: "dismiss-notification", id });
+	}, []);
+
+	const dismissAll = useCallback(() => {
+		sendRuntimeMessage({ type: "dismiss-all-notifications" });
+	}, []);
 
 	useEffect(() => {
 		sendRuntimeMessage({ type: "ensure-connection" });
 
 		let active = true;
-		void getActiveNotification().then((next) => {
-			console.debug("[pi-overlay] initial notification =", next);
-			if (active) setNotification(next);
+		void getActiveNotifications().then((list) => {
+			console.debug("[pi-overlay] initial notifications =", list.length);
+			if (active) setNotifications(list);
 		});
 
 		const handleChange = (
 			changes: Record<string, chrome.storage.StorageChange>,
 			areaName: string,
 		) => {
-			if (areaName !== "local" || !(ACTIVE_NOTIFICATION_KEY in changes)) return;
-			console.debug("[pi-overlay] storage change", changes[ACTIVE_NOTIFICATION_KEY]);
-			setNotification((changes[ACTIVE_NOTIFICATION_KEY]?.newValue as ProjectNotification | null | undefined) ?? null);
+			if (areaName !== "local" || !(ACTIVE_NOTIFICATIONS_KEY in changes)) return;
+			const next = (changes[ACTIVE_NOTIFICATIONS_KEY]?.newValue as ProjectNotification[] | undefined) ?? [];
+			console.debug("[pi-overlay] storage change → count:", next.length);
+			setNotifications(next);
 		};
 
 		chrome.storage.onChanged.addListener(handleChange);
@@ -215,63 +374,56 @@ function Overlay(): React.JSX.Element | null {
 	}, []);
 
 	useEffect(() => {
-		if (!notification) return;
+		if (notifications.length === 0) return;
 
 		const handleEscape = (event: KeyboardEvent) => {
 			if (event.key !== "Escape") return;
 			event.preventDefault();
 			event.stopPropagation();
-			dismiss();
+			dismissAll();
 		};
 
 		window.addEventListener("keydown", handleEscape, true);
 		return () => {
 			window.removeEventListener("keydown", handleEscape, true);
 		};
-	}, [dismiss, notification]);
+	}, [dismissAll, notifications.length]);
 
-	const finishedAt = useMemo(() => {
-		return notification ? formatTime(notification.timestamp) : "";
-	}, [notification]);
+	if (notifications.length === 0) return null;
 
-	if (!notification) return null;
+	const count = notifications.length;
 
 	return (
 		<div className="pi-overlay-root">
-			<div className="pi-overlay-backdrop" onClick={dismiss}>
-				<section className="pi-card" onClick={(event) => event.stopPropagation()}>
-					<div className="pi-pill">
-						<span className="pi-dot" />
-						{notification.title}
-					</div>
-
-					<h1 className="pi-title">Project complete</h1>
-					<p className="pi-project">{notification.projectName}</p>
-
-					<div className="pi-meta-grid">
-						<div>
-							<div className="pi-meta-label">Path</div>
-							<div className="pi-meta-value">{notification.projectPath}</div>
+			<div className="pi-overlay-backdrop">
+				<section className="pi-panel" onClick={(event) => event.stopPropagation()}>
+					<header className="pi-panel-header">
+						<div className="pi-panel-title">
+							<span className="pi-panel-count">{count}</span>
+							{count === 1 ? "Project ready" : "Projects ready"}
 						</div>
-
-						{notification.model ? (
-							<div>
-								<div className="pi-meta-label">Model</div>
-								<div className="pi-meta-value">{notification.model}</div>
-							</div>
-						) : null}
-
-						<div>
-							<div className="pi-meta-label">Finished</div>
-							<div className="pi-meta-value">{finishedAt}</div>
-						</div>
-					</div>
-
-					<div className="pi-actions">
-						<div className="pi-hint">Press Esc or close once to dismiss this overlay in every tab.</div>
-						<button className="pi-close" type="button" onClick={dismiss}>
-							Close everywhere
+						<button
+							className="pi-dismiss-all"
+							type="button"
+							onClick={dismissAll}
+							title="Dismiss every notification (Esc)"
+						>
+							Dismiss all
 						</button>
+					</header>
+
+					<div className="pi-stack">
+						{notifications.map((notification) => (
+							<NotificationCard
+								key={notification.id}
+								notification={notification}
+								onDismiss={dismissOne}
+							/>
+						))}
+					</div>
+
+					<div className="pi-hint">
+						Press <kbd>Esc</kbd> to clear all · click <kbd>×</kbd> on a card to dismiss just that one
 					</div>
 				</section>
 			</div>

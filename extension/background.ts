@@ -1,4 +1,8 @@
-import { getActiveNotification, setActiveNotification } from "./lib/storage";
+import {
+	addNotification,
+	clearNotifications,
+	removeNotification,
+} from "./lib/storage";
 import type { RelayMessage, RuntimeMessage } from "./lib/types";
 
 const RELAY_HTTP_URL = "http://127.0.0.1:48291";
@@ -20,16 +24,20 @@ function scheduleReconnect(): void {
 
 async function handleRelayMessage(message: RelayMessage): Promise<void> {
 	console.debug("[pi-bg] relay message", message);
+
 	if (message.type === "notify") {
-		await setActiveNotification(message.notification);
-		console.debug("[pi-bg] stored notification", message.notification.id);
+		const list = await addNotification(message.notification);
+		console.debug("[pi-bg] stored notification", message.notification.id, "→ total:", list.length);
 		return;
 	}
 
 	if (message.type === "dismiss") {
-		const current = await getActiveNotification();
-		if (!message.id || current?.id === message.id) {
-			await setActiveNotification(null);
+		if (message.id) {
+			const list = await removeNotification(message.id);
+			console.debug("[pi-bg] dismissed", message.id, "→ remaining:", list.length);
+		} else {
+			await clearNotifications();
+			console.debug("[pi-bg] dismissed all");
 		}
 	}
 }
@@ -69,23 +77,26 @@ function connectRelay(): void {
 	});
 }
 
-async function dismissEverywhere(id?: string): Promise<void> {
-	const current = await getActiveNotification();
-	if (id && current?.id && current.id !== id) return;
-
-	await setActiveNotification(null);
-
+async function notifyRelayDismiss(id?: string): Promise<void> {
 	try {
 		await fetch(`${RELAY_HTTP_URL}/dismiss`, {
 			method: "POST",
-			headers: {
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({ id }),
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(id ? { id } : {}),
 		});
 	} catch {
-		// The browser overlay should still close even if the relay is offline.
+		// Overlay should still close even if the relay is offline.
 	}
+}
+
+async function dismissOne(id: string): Promise<void> {
+	await removeNotification(id);
+	await notifyRelayDismiss(id);
+}
+
+async function dismissAll(): Promise<void> {
+	await clearNotifications();
+	await notifyRelayDismiss();
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -106,7 +117,14 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
 	}
 
 	if (message.type === "dismiss-notification") {
-		void dismissEverywhere(message.id).finally(() => {
+		void dismissOne(message.id).finally(() => {
+			sendResponse({ ok: true });
+		});
+		return true;
+	}
+
+	if (message.type === "dismiss-all-notifications") {
+		void dismissAll().finally(() => {
 			sendResponse({ ok: true });
 		});
 		return true;

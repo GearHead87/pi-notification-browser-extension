@@ -23,5 +23,8 @@ export type RuntimeMessage =
 	  }
 	| {
 			type: "dismiss-notification";
-			id?: string;
+			id: string;
+	  }
+	| {
+			type: "dismiss-all-notifications";
 	  };
