@@ -1,0 +1,7 @@
+node_modules
+extension/.plasmo
+extension/build
+extension/.parcel-cache
+relay/dist
+*.log
+.DS_Store

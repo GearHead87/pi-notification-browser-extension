@@ -1,0 +1,34 @@
+{
+  "name": "pi-notification-browser-extension",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Fullscreen Pi completion notifications in Chrome tabs",
+  "scripts": {
+    "dev": "plasmo dev --target=chrome-mv3",
+    "build": "plasmo build --target=chrome-mv3",
+    "package": "plasmo package --target=chrome-mv3"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.270",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "plasmo": "^0.89.5",
+    "typescript": "^5.6.3"
+  },
+  "manifest": {
+    "name": "Pi Notification Overlay",
+    "description": "Show fullscreen project completion overlays for Pi tasks.",
+    "permissions": [
+      "storage"
+    ],
+    "host_permissions": [
+      "<all_urls>",
+      "http://127.0.0.1/*",
+      "http://localhost/*"
+    ]
+  }
+}

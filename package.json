@@ -1,0 +1,16 @@
+{
+  "name": "pi-notification-extension",
+  "private": true,
+  "workspaces": [
+    "extension",
+    "relay"
+  ],
+  "scripts": {
+    "dev:extension": "npm --workspace extension run dev",
+    "build:extension": "npm --workspace extension run build",
+    "package:extension": "npm --workspace extension run package",
+    "dev:relay": "npm --workspace relay run dev",
+    "build:relay": "npm --workspace relay run build",
+    "start:relay": "npm --workspace relay run start"
+  }
+}
