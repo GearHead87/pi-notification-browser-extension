@@ -1,16 +1,13 @@
 {
   "name": "pi-notification-extension",
   "private": true,
-  "workspaces": [
-    "extension",
-    "relay"
-  ],
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
-    "dev:extension": "npm --workspace extension run dev",
-    "build:extension": "npm --workspace extension run build",
-    "package:extension": "npm --workspace extension run package",
-    "dev:relay": "npm --workspace relay run dev",
-    "build:relay": "npm --workspace relay run build",
-    "start:relay": "npm --workspace relay run start"
+    "dev:extension": "pnpm --filter ./extension dev",
+    "build:extension": "pnpm --filter ./extension build",
+    "package:extension": "pnpm --filter ./extension package",
+    "dev:relay": "pnpm --filter ./relay dev",
+    "build:relay": "pnpm --filter ./relay build",
+    "start:relay": "pnpm --filter ./relay start"
   }
 }
