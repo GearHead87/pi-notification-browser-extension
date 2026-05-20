@@ -19,8 +19,10 @@ function scheduleReconnect(): void {
 }
 
 async function handleRelayMessage(message: RelayMessage): Promise<void> {
+	console.debug("[pi-bg] relay message", message);
 	if (message.type === "notify") {
 		await setActiveNotification(message.notification);
+		console.debug("[pi-bg] stored notification", message.notification.id);
 		return;
 	}
 

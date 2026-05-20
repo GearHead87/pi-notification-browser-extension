@@ -194,6 +194,7 @@ function Overlay(): React.JSX.Element | null {
 
 		let active = true;
 		void getActiveNotification().then((next) => {
+			console.debug("[pi-overlay] initial notification =", next);
 			if (active) setNotification(next);
 		});
 
@@ -202,6 +203,7 @@ function Overlay(): React.JSX.Element | null {
 			areaName: string,
 		) => {
 			if (areaName !== "local" || !(ACTIVE_NOTIFICATION_KEY in changes)) return;
+			console.debug("[pi-overlay] storage change", changes[ACTIVE_NOTIFICATION_KEY]);
 			setNotification((changes[ACTIVE_NOTIFICATION_KEY]?.newValue as ProjectNotification | null | undefined) ?? null);
 		};
 
@@ -278,7 +280,10 @@ function Overlay(): React.JSX.Element | null {
 }
 
 function mount(): void {
-	if (document.getElementById(HOST_ID)) return;
+	if (document.getElementById(HOST_ID)) {
+		console.debug("[pi-overlay] host already mounted");
+		return;
+	}
 
 	const host = document.createElement("div");
 	host.id = HOST_ID;
@@ -293,7 +298,10 @@ function mount(): void {
 
 	document.documentElement.appendChild(host);
 	createRoot(rootElement).render(<Overlay />);
+	console.debug("[pi-overlay] mounted on", location.href);
 }
+
+console.debug("[pi-overlay] content script loaded, readyState =", document.readyState);
 
 if (document.readyState === "loading") {
 	document.addEventListener("DOMContentLoaded", mount, { once: true });
