@@ -120,3 +120,20 @@ export PI_NOTIFICATION_RELAY_PORT=48291
   "timestamp": 1712345678901
 }
 ```
+
+## bash code for release
+```base
+pnpm release:extension:prepare -- --version patch --notes "Your release note here"
+```
+
+```bash
+VERSION="$(node -p "require('./extension/package.json').version")"
+
+git add extension/package.json CHANGELOG.md
+git commit -m "chore: release extension v${VERSION}"
+
+git tag -a "v${VERSION}" -m "Pi Notification Extension v${VERSION}"
+
+git push origin HEAD
+git push origin "v${VERSION}"
+```
