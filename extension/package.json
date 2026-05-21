@@ -1,6 +1,6 @@
 {
   "name": "pi-notification-browser-extension",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "description": "Fullscreen Pi completion notifications in Chrome tabs",
   "scripts": {
