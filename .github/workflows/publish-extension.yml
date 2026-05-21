@@ -1,0 +1,126 @@
+name: Publish Extension
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish, for example v1.2.3"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-extension-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  BPP_KEYS: ${{ secrets.BPP_KEYS }}
+  PACKAGE_MANAGER_VERSION: 10.33.0
+
+jobs:
+  publish:
+    name: Build and publish extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve release version
+        run: |
+          TAG_NAME="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          VERSION="${TAG_NAME#v}"
+          PACKAGE_VERSION="$(node -p "require('./extension/package.json').version")"
+
+          if [ "${TAG_NAME}" = "${VERSION}" ]; then
+            echo "Release tags must start with v, for example v1.2.3."
+            exit 1
+          fi
+
+          if [ "${PACKAGE_VERSION}" != "${VERSION}" ]; then
+            echo "Tag ${TAG_NAME} does not match extension/package.json version ${PACKAGE_VERSION}."
+            exit 1
+          fi
+
+          echo "TAG_NAME=${TAG_NAME}" >> "${GITHUB_ENV}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+          echo "ASSET_NAME=pi-notification-overlay-v${VERSION}.zip" >> "${GITHUB_ENV}"
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PACKAGE_MANAGER_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build extension
+        run: pnpm build:extension
+
+      - name: Package extension zip
+        run: pnpm package:extension
+
+      - name: Prepare release asset
+        run: |
+          ZIP_SOURCE="extension/build/chrome-mv3-prod.zip"
+          if [ ! -f "${ZIP_SOURCE}" ]; then
+            ZIP_SOURCE="$(find extension/build -maxdepth 1 -name '*.zip' -print -quit)"
+          fi
+
+          if [ -z "${ZIP_SOURCE}" ] || [ ! -f "${ZIP_SOURCE}" ]; then
+            echo "Could not find packaged extension zip in extension/build."
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp "${ZIP_SOURCE}" "dist/${ASSET_NAME}"
+
+      - name: Extract release notes
+        run: node scripts/extract-extension-release-notes.mjs --version "${VERSION}" --output "${RUNNER_TEMP}/release-notes.md"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ASSET_NAME }}
+          path: dist/${{ env.ASSET_NAME }}
+          if-no-files-found: error
+
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
+            gh release upload "${TAG_NAME}" "dist/${ASSET_NAME}" --clobber
+            gh release edit "${TAG_NAME}" \
+              --title "Pi Notification Extension v${VERSION}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md"
+          else
+            gh release create "${TAG_NAME}" "dist/${ASSET_NAME}" \
+              --verify-tag \
+              --title "Pi Notification Extension v${VERSION}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md"
+          fi
+
+      - name: Publish to browser stores
+        if: ${{ env.BPP_KEYS != '' }}
+        uses: PlasmoHQ/bpp@v3
+        with:
+          keys: ${{ env.BPP_KEYS }}
+          artifact: dist/${{ env.ASSET_NAME }}
+          version-file: extension/package.json

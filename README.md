@@ -60,6 +60,19 @@ You can also use Plasmo dev mode:
 npm run dev:extension
 ```
 
+## Extension releases
+
+Releases are driven by tags so the built zip, GitHub release, package version, and changelog all point at the same source commit.
+
+1. Run the **Prepare Extension Release** GitHub Action on the branch you want to release.
+2. Enter `patch`, `minor`, `major`, or an exact `x.y.z` version.
+3. Add release notes. The action writes them to `CHANGELOG.md`, bumps `extension/package.json`, commits the change, and creates an annotated `vX.Y.Z` tag.
+4. The `vX.Y.Z` tag automatically starts the **Publish Extension** workflow.
+
+The publish workflow installs dependencies with pnpm, builds the Plasmo extension, packages `extension/build/chrome-mv3-prod.zip`, uploads it as a workflow artifact, and creates or updates a GitHub release with the changelog notes.
+
+To also publish to browser extension stores, add a repository secret named `BPP_KEYS` containing the Plasmo Browser Platform Publisher JSON credentials. If `BPP_KEYS` is absent, the workflow still publishes the GitHub release zip and skips store publishing.
+
 ### 4) Reload Pi
 
 Your Pi extension at:
