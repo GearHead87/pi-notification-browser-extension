@@ -6,7 +6,19 @@ import {
 import type { RelayMessage, RuntimeMessage } from "./lib/types";
 
 const RELAY_HTTP_URL = "http://127.0.0.1:48291";
-const RELAY_WS_URL = "ws://127.0.0.1:48291";
+const RELAY_WS_BASE_URL = "ws://127.0.0.1:48291";
+const RELAY_API_KEY = process.env.PLASMO_PUBLIC_PI_NOTIFICATION_RELAY_API_KEY ?? "";
+
+function buildRelayWsUrl(): string {
+	if (!RELAY_API_KEY) return RELAY_WS_BASE_URL;
+	return `${RELAY_WS_BASE_URL}/?api_key=${encodeURIComponent(RELAY_API_KEY)}`;
+}
+
+function buildRelayHeaders(): Record<string, string> {
+	const headers: Record<string, string> = { "content-type": "application/json" };
+	if (RELAY_API_KEY) headers["x-api-key"] = RELAY_API_KEY;
+	return headers;
+}
 
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,7 +60,7 @@ function connectRelay(): void {
 	}
 
 	try {
-		socket = new WebSocket(RELAY_WS_URL);
+		socket = new WebSocket(buildRelayWsUrl());
 	} catch {
 		scheduleReconnect();
 		return;
@@ -81,7 +93,7 @@ async function notifyRelayDismiss(id?: string): Promise<void> {
 	try {
 		await fetch(`${RELAY_HTTP_URL}/dismiss`, {
 			method: "POST",
-			headers: { "content-type": "application/json" },
+			headers: buildRelayHeaders(),
 			body: JSON.stringify(id ? { id } : {}),
 		});
 	} catch {

@@ -5,3 +5,4 @@ extension/.parcel-cache
 relay/dist
 *.log
 .DS_Store
+.env

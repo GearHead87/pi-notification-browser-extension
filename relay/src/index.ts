@@ -21,6 +21,15 @@ type RelayMessage =
 	  };
 
 const PORT = Number(process.env.PI_NOTIFICATION_RELAY_PORT ?? 48291);
+const API_KEY = process.env.PI_NOTIFICATION_RELAY_API_KEY;
+
+if (!API_KEY) {
+	console.error(
+		"[relay] PI_NOTIFICATION_RELAY_API_KEY is not set. Refusing to start without an API key.",
+	);
+	process.exit(1);
+}
+
 let activeNotification: ProjectNotification | null = null;
 
 function json(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -28,9 +37,26 @@ function json(res: ServerResponse, statusCode: number, body: unknown): void {
 		"content-type": "application/json; charset=utf-8",
 		"access-control-allow-origin": "*",
 		"access-control-allow-methods": "GET, POST, OPTIONS",
-		"access-control-allow-headers": "content-type",
+		"access-control-allow-headers": "content-type, x-api-key",
 	});
 	res.end(JSON.stringify(body));
+}
+
+function requireApiKey(req: IncomingMessage, res: ServerResponse): boolean {
+	const headerValue = req.headers["x-api-key"];
+	const provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+
+	if (!provided) {
+		json(res, 401, { ok: false, error: "Missing x-api-key header" });
+		return false;
+	}
+
+	if (provided !== API_KEY) {
+		json(res, 403, { ok: false, error: "Invalid x-api-key" });
+		return false;
+	}
+
+	return true;
 }
 
 function broadcast(message: RelayMessage): void {
@@ -76,6 +102,10 @@ const server = createServer(async (req, res) => {
 
 	if (req.method === "OPTIONS") {
 		json(res, 200, { ok: true });
+		return;
+	}
+
+	if (!requireApiKey(req, res)) {
 		return;
 	}
 
@@ -130,7 +160,43 @@ const server = createServer(async (req, res) => {
 	json(res, 404, { ok: false, error: "Not found" });
 });
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+	noServer: true,
+});
+
+server.on("upgrade", (req, socket, head) => {
+	const headerValue = req.headers["x-api-key"];
+	let provided = Array.isArray(headerValue) ? headerValue[0] : headerValue;
+
+	// Browsers cannot set custom headers on the WebSocket handshake,
+	// so we also allow the key via a query parameter (?api_key=...).
+	if (!provided) {
+		try {
+			const url = new URL(req.url ?? "/", `http://${req.headers.host ?? `127.0.0.1:${PORT}`}`);
+			provided = url.searchParams.get("api_key") ?? undefined;
+		} catch {
+			// ignore URL parse errors
+		}
+	}
+
+	if (!provided || provided !== API_KEY) {
+		const status = !provided ? "401 Unauthorized" : "403 Forbidden";
+		const body = !provided ? "Missing x-api-key header" : "Invalid x-api-key";
+		socket.write(
+			`HTTP/1.1 ${status}\r\n` +
+				"content-type: text/plain; charset=utf-8\r\n" +
+				`content-length: ${Buffer.byteLength(body)}\r\n` +
+				"connection: close\r\n\r\n" +
+				body,
+		);
+		socket.destroy();
+		return;
+	}
+
+	wss.handleUpgrade(req, socket, head, (ws) => {
+		wss.emit("connection", ws, req);
+	});
+});
 
 wss.on("connection", (socket) => {
 	if (activeNotification) {
