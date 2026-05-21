@@ -17,6 +17,12 @@ When a Pi agent run completes:
 4. The Chrome extension stores the active notification and shows a fullscreen overlay in normal browser tabs.
 5. Closing the overlay in one tab clears it everywhere.
 
+## Preview
+
+![Pi Notification Overlay shown over a browser tab](image/image.png)
+
+The overlay floats above whatever page you're on. Each completed run becomes a card with the project path, the model that ran, and a finish time. Press `Esc` to clear them all, or click the × on a single card to dismiss just that one.
+
 ## Browser behavior
 
 The overlay covers the full page viewport inside normal tabs (`http://` / `https://`).
