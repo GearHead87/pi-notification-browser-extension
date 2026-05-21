@@ -1,0 +1,44 @@
+# Keep the build context tight — we only need the workspace manifests and
+# the relay package source. Everything else (the extension, build outputs,
+# git metadata, local env files, etc.) is excluded.
+
+# Node / pnpm artifacts
+**/node_modules
+**/.pnpm-store
+
+# Build outputs
+relay/dist
+extension/build
+extension/.plasmo
+extension/.parcel-cache
+
+# Extension package — not shipped in the relay image
+extension
+
+# VCS / editor metadata
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+
+# Local env files (must be supplied at runtime instead)
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and OS junk
+*.log
+.DS_Store
+Thumbs.db
+
+# Docker bits don't need to be sent to the daemon
+Dockerfile
+.dockerignore
+
+# Misc
+CHANGELOG.md
+README.md
