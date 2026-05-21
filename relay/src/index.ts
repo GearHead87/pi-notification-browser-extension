@@ -20,7 +20,7 @@ type RelayMessage =
 			id?: string;
 	  };
 
-const PORT = Number(process.env.PI_NOTIFICATION_RELAY_PORT ?? 48291);
+const PORT = Number(process.env.PI_NOTIFICATION_RELAY_PORT ?? 48293);
 const API_KEY = process.env.PI_NOTIFICATION_RELAY_API_KEY;
 
 if (!API_KEY) {
@@ -102,6 +102,14 @@ const server = createServer(async (req, res) => {
 
 	if (req.method === "OPTIONS") {
 		json(res, 200, { ok: true });
+		return;
+	}
+
+	// Public ping endpoint — does not require auth.
+	// Lets clients (e.g. the browser extension popup) detect whether the
+	// relay process is running without needing a valid API key.
+	if (req.method === "GET" && url.pathname === "/ping") {
+		json(res, 200, { ok: true, service: "pi-notification-relay" });
 		return;
 	}
 

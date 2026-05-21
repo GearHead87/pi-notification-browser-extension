@@ -29,6 +29,10 @@
       "<all_urls>",
       "http://127.0.0.1/*",
       "http://localhost/*"
-    ]
+    ],
+    "options_ui": {
+      "page": "options.html",
+      "open_in_tab": true
+    }
   }
 }
