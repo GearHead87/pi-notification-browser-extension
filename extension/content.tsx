@@ -1,6 +1,9 @@
-import type { PlasmoCSConfig } from "plasmo";
+import type {
+	PlasmoCSConfig,
+	PlasmoGetShadowHostId,
+	PlasmoGetStyle,
+} from "plasmo";
 import React, { useCallback, useEffect, useState } from "react";
-import { createRoot } from "react-dom/client";
 import { ACTIVE_NOTIFICATIONS_KEY, getActiveNotifications } from "./lib/storage";
 import type { ProjectNotification, RuntimeMessage } from "./lib/types";
 
@@ -264,6 +267,14 @@ const overlayCss = `
 	}
 `;
 
+export const getStyle: PlasmoGetStyle = () => {
+	const style = document.createElement("style");
+	style.textContent = overlayCss;
+	return style;
+};
+
+export const getShadowHostId: PlasmoGetShadowHostId = () => HOST_ID;
+
 function sendRuntimeMessage(message: RuntimeMessage): void {
 	chrome.runtime.sendMessage(message, () => {
 		void chrome.runtime.lastError;
@@ -430,34 +441,4 @@ function Overlay(): React.JSX.Element | null {
 	);
 }
 
-function mount(): void {
-	if (document.getElementById(HOST_ID)) {
-		console.debug("[pi-overlay] host already mounted");
-		return;
-	}
-
-	const host = document.createElement("div");
-	host.id = HOST_ID;
-
-	const shadowRoot = host.attachShadow({ mode: "open" });
-	const style = document.createElement("style");
-	style.textContent = overlayCss;
-	shadowRoot.appendChild(style);
-
-	const rootElement = document.createElement("div");
-	shadowRoot.appendChild(rootElement);
-
-	document.documentElement.appendChild(host);
-	createRoot(rootElement).render(<Overlay />);
-	console.debug("[pi-overlay] mounted on", location.href);
-}
-
-console.debug("[pi-overlay] content script loaded, readyState =", document.readyState);
-
-if (document.readyState === "loading") {
-	document.addEventListener("DOMContentLoaded", mount, { once: true });
-} else {
-	mount();
-}
-
-export {};
+export default Overlay;
