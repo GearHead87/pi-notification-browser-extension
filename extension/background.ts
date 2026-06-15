@@ -17,6 +17,10 @@ let currentSettings: ExtensionSettings = { ...DEFAULT_SETTINGS };
 let socket: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectAttempt = 0;
+let connectionGeneration = 0;
+let settingsLoaded = false;
+
+const RELAY_FETCH_TIMEOUT_MS = 4_000;
 
 function buildRelayWsUrl(): string | null {
 	const base = normalizeRelayUrl(currentSettings.relayUrl);
@@ -39,6 +43,7 @@ function clearReconnectTimer(): void {
 }
 
 function disconnect(): void {
+	connectionGeneration += 1;
 	clearReconnectTimer();
 	reconnectAttempt = 0;
 	if (socket) {
@@ -51,14 +56,43 @@ function disconnect(): void {
 	}
 }
 
-function scheduleReconnect(): void {
+function scheduleReconnect(generation: number): void {
+	if (generation !== connectionGeneration) return;
 	if (reconnectTimer) return;
 	const delay = Math.min(30_000, 1_000 * 2 ** reconnectAttempt);
 	reconnectTimer = setTimeout(() => {
 		reconnectTimer = null;
+		if (generation !== connectionGeneration) return;
 		reconnectAttempt += 1;
 		connectRelay();
 	}, delay);
+}
+
+function isActiveSocket(ws: WebSocket, generation: number): boolean {
+	return socket === ws && generation === connectionGeneration;
+}
+
+async function fetchWithTimeout(
+	input: RequestInfo | URL,
+	init: RequestInit = {},
+	timeoutMs = RELAY_FETCH_TIMEOUT_MS,
+): Promise<Response> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+	try {
+		return await fetch(input, { ...init, signal: controller.signal });
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+function formatRequestError(error: unknown, fallback: string): string {
+	if (error instanceof DOMException && error.name === "AbortError") {
+		return `${fallback}: request timed out`;
+	}
+
+	return error instanceof Error ? `${fallback}: ${error.message}` : fallback;
 }
 
 async function handleRelayMessage(message: RelayMessage): Promise<void> {
@@ -104,20 +138,27 @@ function connectRelay(): void {
 		return;
 	}
 
+	const generation = connectionGeneration;
+	let nextSocket: WebSocket;
+
 	try {
-		socket = new WebSocket(url);
+		nextSocket = new WebSocket(url);
 	} catch (error) {
 		console.debug("[pi-bg] WebSocket constructor failed", error);
-		scheduleReconnect();
+		scheduleReconnect(generation);
 		return;
 	}
 
-	socket.addEventListener("open", () => {
+	socket = nextSocket;
+
+	nextSocket.addEventListener("open", () => {
+		if (!isActiveSocket(nextSocket, generation)) return;
 		reconnectAttempt = 0;
 		console.debug("[pi-bg] relay connected");
 	});
 
-	socket.addEventListener("message", (event) => {
+	nextSocket.addEventListener("message", (event) => {
+		if (!isActiveSocket(nextSocket, generation)) return;
 		try {
 			const message = JSON.parse(String(event.data)) as RelayMessage;
 			void handleRelayMessage(message);
@@ -126,13 +167,15 @@ function connectRelay(): void {
 		}
 	});
 
-	socket.addEventListener("error", () => {
-		socket?.close();
+	nextSocket.addEventListener("error", () => {
+		if (!isActiveSocket(nextSocket, generation)) return;
+		nextSocket.close();
 	});
 
-	socket.addEventListener("close", () => {
+	nextSocket.addEventListener("close", () => {
+		if (!isActiveSocket(nextSocket, generation)) return;
 		socket = null;
-		scheduleReconnect();
+		scheduleReconnect(generation);
 	});
 }
 
@@ -142,7 +185,7 @@ async function notifyRelayDismiss(id?: string): Promise<void> {
 	if (!headers || !base) return;
 
 	try {
-		await fetch(`${base}/dismiss`, {
+		await fetchWithTimeout(`${base}/dismiss`, {
 			method: "POST",
 			headers,
 			body: JSON.stringify(id ? { id } : {}),
@@ -154,12 +197,12 @@ async function notifyRelayDismiss(id?: string): Promise<void> {
 
 async function dismissOne(id: string): Promise<void> {
 	await removeNotification(id);
-	await notifyRelayDismiss(id);
+	void notifyRelayDismiss(id);
 }
 
 async function dismissAll(): Promise<void> {
 	await clearNotifications();
-	await notifyRelayDismiss();
+	void notifyRelayDismiss();
 }
 
 async function probeRelayStatus(): Promise<RelayStatus> {
@@ -182,7 +225,7 @@ async function probeRelayStatus(): Promise<RelayStatus> {
 	}
 
 	try {
-		const pingRes = await fetch(`${base}/ping`, { method: "GET" });
+		const pingRes = await fetchWithTimeout(`${base}/ping`, { method: "GET" });
 		if (pingRes.ok) {
 			status.serverReachable = true;
 		} else {
@@ -190,10 +233,7 @@ async function probeRelayStatus(): Promise<RelayStatus> {
 			return status;
 		}
 	} catch (error) {
-		status.error =
-			error instanceof Error
-				? `Cannot reach relay: ${error.message}`
-				: "Cannot reach relay";
+		status.error = formatRequestError(error, "Cannot reach relay");
 		return status;
 	}
 
@@ -203,7 +243,7 @@ async function probeRelayStatus(): Promise<RelayStatus> {
 	}
 
 	try {
-		const healthRes = await fetch(`${base}/health`, {
+		const healthRes = await fetchWithTimeout(`${base}/health`, {
 			method: "GET",
 			headers: { "x-api-key": apiKey },
 		});
@@ -215,10 +255,7 @@ async function probeRelayStatus(): Promise<RelayStatus> {
 			status.error = `Health check failed (HTTP ${healthRes.status})`;
 		}
 	} catch (error) {
-		status.error =
-			error instanceof Error
-				? `Health check failed: ${error.message}`
-				: "Health check failed";
+		status.error = formatRequestError(error, "Health check failed");
 	}
 
 	return status;
@@ -226,11 +263,28 @@ async function probeRelayStatus(): Promise<RelayStatus> {
 
 async function loadSettings(): Promise<void> {
 	currentSettings = await getSettings();
+	settingsLoaded = true;
 }
 
 async function applySettingsAndReconnect(): Promise<void> {
 	await loadSettings();
 	disconnect();
+	connectRelay();
+}
+
+async function ensureConnection(): Promise<void> {
+	if (!settingsLoaded) {
+		await loadSettings();
+	}
+
+	if (
+		socket &&
+		(socket.readyState === WebSocket.OPEN ||
+			socket.readyState === WebSocket.CONNECTING)
+	) {
+		return;
+	}
+
 	connectRelay();
 }
 
@@ -254,7 +308,7 @@ chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResp
 	if (!message || typeof message !== "object") return false;
 
 	if (message.type === "ensure-connection") {
-		void applySettingsAndReconnect();
+		void ensureConnection();
 		sendResponse({ ok: true });
 		return false;
 	}

@@ -25,31 +25,29 @@ const overlayCss = `
 		inset: 0;
 		z-index: 2147483647;
 		font-family: "SF Pro Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+		pointer-events: none;
 	}
 
 	.pi-overlay-backdrop {
 		position: absolute;
 		inset: 0;
 		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 32px;
-		background:
-			radial-gradient(circle at top, rgba(92, 255, 166, 0.14), transparent 34%),
-			radial-gradient(circle at bottom, rgba(96, 165, 250, 0.18), transparent 40%),
-			rgba(4, 10, 18, 0.82);
-		backdrop-filter: blur(18px) saturate(120%);
+		align-items: flex-start;
+		justify-content: flex-end;
+		padding: 20px;
+		background: transparent;
 		animation: piFadeIn 160ms ease-out;
+		pointer-events: none;
 	}
 
 	.pi-panel {
-		width: min(760px, 100%);
-		max-height: min(86vh, 900px);
+		width: min(520px, calc(100vw - 40px));
+		max-height: min(72vh, 760px);
 		display: flex;
 		flex-direction: column;
 		gap: 16px;
 		padding: 22px 22px 18px;
-		border-radius: 28px;
+		border-radius: 18px;
 		color: #ecfdf5;
 		background: linear-gradient(180deg, rgba(9, 18, 29, 0.96), rgba(8, 14, 24, 0.94));
 		border: 1px solid rgba(255, 255, 255, 0.08);
@@ -57,6 +55,7 @@ const overlayCss = `
 			0 30px 80px rgba(0, 0, 0, 0.45),
 			0 0 0 1px rgba(92, 255, 166, 0.08) inset;
 		animation: piRise 220ms ease-out;
+		pointer-events: auto;
 	}
 
 	.pi-panel-header {
