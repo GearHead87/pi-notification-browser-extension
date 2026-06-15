@@ -4,6 +4,13 @@ All notable changes to the browser extension are documented in this file.
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-06-15
+- Add image asset for notification extension
+- Add preview section to README for notification overlay
+- Enhance WebSocket connection management and improve error handling
+- Remove extension release workflow and update README for versioning process
+
+
 ## [0.0.3] - 2026-05-21
 - Add in-extension settings page (toolbar icon + options page) for relay URL and x-api-key, persisted in
 - chrome.storage.local
