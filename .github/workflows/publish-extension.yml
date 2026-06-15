@@ -4,55 +4,125 @@ on:
   push:
     tags:
       - "v*.*.*"
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing release tag to publish, for example v1.2.3"
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: publish-extension-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: publish-extension-${{ github.ref_name }}
   cancel-in-progress: false
 
 env:
   BPP_KEYS: ${{ secrets.BPP_KEYS }}
+  DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
   PACKAGE_MANAGER_VERSION: 10.33.0
 
 jobs:
   publish:
-    name: Build and publish extension
+    name: Prepare, build, and publish extension
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out release tag
+      - name: Check out default branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
       - name: Resolve release version
+        id: resolve
         run: |
-          TAG_NAME="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
           VERSION="${TAG_NAME#v}"
-          PACKAGE_VERSION="$(node -p "require('./extension/package.json').version")"
 
           if [ "${TAG_NAME}" = "${VERSION}" ]; then
             echo "Release tags must start with v, for example v1.2.3."
             exit 1
           fi
 
-          if [ "${PACKAGE_VERSION}" != "${VERSION}" ]; then
-            echo "Tag ${TAG_NAME} does not match extension/package.json version ${PACKAGE_VERSION}."
+          if ! [[ "${VERSION}" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Release tag ${TAG_NAME} must be Chrome-compatible semver, for example v1.2.3."
             exit 1
+          fi
+
+          git fetch --force origin \
+            "+refs/heads/${DEFAULT_BRANCH}:refs/remotes/origin/${DEFAULT_BRANCH}" \
+            "+refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+
+          TAG_COMMIT="$(git rev-parse "${TAG_NAME}^{commit}")"
+          BRANCH_COMMIT="$(git rev-parse "origin/${DEFAULT_BRANCH}")"
+          TAG_PACKAGE_VERSION="$(git show "${TAG_COMMIT}:extension/package.json" | node -e "const fs = require('node:fs'); console.log(JSON.parse(fs.readFileSync(0, 'utf8')).version)")"
+
+          if [ "${TAG_PACKAGE_VERSION}" = "${VERSION}" ] && git show "${TAG_COMMIT}:CHANGELOG.md" | grep -q "^## \\[${VERSION}\\]"; then
+            git checkout --detach "${TAG_COMMIT}"
+            echo "prepared=true" >> "${GITHUB_OUTPUT}"
+            echo "RELEASE_COMMIT=${TAG_COMMIT}" >> "${GITHUB_ENV}"
+          else
+            if [ "${TAG_COMMIT}" != "${BRANCH_COMMIT}" ]; then
+              echo "Tag ${TAG_NAME} points at ${TAG_COMMIT}, but ${DEFAULT_BRANCH} is ${BRANCH_COMMIT}."
+              echo "Push release tags from the latest ${DEFAULT_BRANCH} commit."
+              exit 1
+            fi
+
+            git checkout -B "${DEFAULT_BRANCH}" "origin/${DEFAULT_BRANCH}"
+            echo "prepared=false" >> "${GITHUB_OUTPUT}"
           fi
 
           echo "TAG_NAME=${TAG_NAME}" >> "${GITHUB_ENV}"
           echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
           echo "ASSET_NAME=pi-notification-overlay-v${VERSION}.zip" >> "${GITHUB_ENV}"
+
+      - name: Find previous release tag
+        id: previous
+        if: ${{ steps.resolve.outputs.prepared != 'true' }}
+        run: |
+          set -euo pipefail
+
+          TAG_COMMIT="$(git rev-parse "${TAG_NAME}^{commit}")"
+          PREVIOUS_TAG="$(git tag --merged "${TAG_COMMIT}" --sort=-v:refname --list 'v[0-9]*.[0-9]*.[0-9]*' | grep -v -x "${TAG_NAME}" | head -n 1 || true)"
+          echo "tag=${PREVIOUS_TAG}" >> "${GITHUB_OUTPUT}"
+
+      - name: Generate release notes
+        if: ${{ steps.resolve.outputs.prepared != 'true' }}
+        run: |
+          set -euo pipefail
+
+          FROM_ARGS=()
+          if [ -n "${{ steps.previous.outputs.tag }}" ]; then
+            FROM_ARGS=(--from "${{ steps.previous.outputs.tag }}")
+          fi
+
+          node scripts/generate-extension-release-notes.mjs \
+            --version "${VERSION}" \
+            "${FROM_ARGS[@]}" \
+            --to "${TAG_NAME}^{commit}" \
+            --output "${RUNNER_TEMP}/generated-release-notes.md"
+
+      - name: Commit release files and retarget tag
+        if: ${{ steps.resolve.outputs.prepared != 'true' }}
+        run: |
+          set -euo pipefail
+
+          node scripts/prepare-extension-release.mjs \
+            --version "${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/generated-release-notes.md"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add extension/package.json CHANGELOG.md
+
+          if git diff --cached --quiet; then
+            echo "Release preparation did not change extension/package.json or CHANGELOG.md."
+            exit 1
+          fi
+
+          git commit -m "chore: release extension v${VERSION}"
+          git tag -fa "${TAG_NAME}" -m "Pi Notification Extension v${VERSION}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+          git push --force origin "refs/tags/${TAG_NAME}"
+          echo "RELEASE_COMMIT=$(git rev-parse HEAD)" >> "${GITHUB_ENV}"
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4

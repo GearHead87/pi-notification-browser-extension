@@ -6,8 +6,6 @@
     "dev:extension": "pnpm --filter ./extension dev",
     "build:extension": "pnpm --filter ./extension build",
     "package:extension": "pnpm --filter ./extension package",
-    "release:extension:prepare": "node scripts/prepare-extension-release.mjs",
-    "release:extension:notes": "node scripts/extract-extension-release-notes.mjs",
     "dev:relay": "pnpm --filter ./relay dev",
     "build:relay": "pnpm --filter ./relay build",
     "start:relay": "pnpm --filter ./relay start"

@@ -238,8 +238,6 @@ Run from the repository root:
 | `pnpm dev:extension`          | Plasmo dev mode for the extension (`extension/build/chrome-mv3-dev`) |
 | `pnpm build:extension`        | Production build (`extension/build/chrome-mv3-prod`)           |
 | `pnpm package:extension`      | Produce the distributable `.zip`                               |
-| `pnpm release:extension:prepare` | Bump version + write CHANGELOG (used by the release workflow) |
-| `pnpm release:extension:notes`   | Extract notes for the latest version                         |
 
 ---
 
@@ -272,31 +270,18 @@ And verify the relay is logging the incoming `[relay] notify …` line.
 
 ## Extension releases
 
-Releases are driven by tags so the built zip, GitHub release, package version, and changelog all point at the same source commit.
+Releases are driven by version tags. Push a Chrome-compatible semver tag from the latest `main` commit:
 
-1. Run the **Prepare Extension Release** GitHub Action on the branch you want to release.
-2. Enter `patch`, `minor`, `major`, or an exact `x.y.z` version.
-3. Add release notes. The action writes them to `CHANGELOG.md`, bumps `extension/package.json`, commits the change, and creates an annotated `vX.Y.Z` tag.
-4. The `vX.Y.Z` tag automatically starts the **Publish Extension** workflow.
+```bash
+git checkout main
+git pull --ff-only
+git push origin main
+git tag v0.0.4
+git push origin v0.0.4
+```
+
+The **Publish Extension** workflow uses the pushed tag as the requested version. It generates release notes from commits since the previous `vX.Y.Z` tag, updates `extension/package.json`, writes the `CHANGELOG.md` entry, commits those release files to `main`, retargets the tag to that release commit, then builds and publishes the extension.
 
 The publish workflow installs dependencies with pnpm, builds the Plasmo extension, packages `extension/build/chrome-mv3-prod.zip`, uploads it as a workflow artifact, and creates or updates a GitHub release with the changelog notes.
 
 To also publish to browser extension stores, add a repository secret named `BPP_KEYS` containing the Plasmo Browser Platform Publisher JSON credentials. If `BPP_KEYS` is absent, the workflow still publishes the GitHub release zip and skips store publishing.
-
-### Local release helper
-
-```bash
-pnpm release:extension:prepare -- --version patch --notes "Your release note here"
-```
-
-```bash
-VERSION="$(node -p "require('./extension/package.json').version")"
-
-git add extension/package.json CHANGELOG.md
-git commit -m "chore: release extension v${VERSION}"
-
-git tag -a "v${VERSION}" -m "Pi Notification Extension v${VERSION}"
-
-git push origin HEAD
-git push origin "v${VERSION}"
-```
