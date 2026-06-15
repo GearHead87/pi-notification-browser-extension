@@ -4,6 +4,10 @@ All notable changes to the browser extension are documented in this file.
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-06-15
+- Release v0.0.6
+
+
 ## [0.0.4] - 2026-06-15
 - Add image asset for notification extension
 - Add preview section to README for notification overlay
